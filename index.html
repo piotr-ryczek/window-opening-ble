@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Window Opening BLE</title>
+    <style>
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 20px;
+        }
+        button {
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="button-container">
+        <button onclick="findDevices()">Find Devices</button>
+        <button onclick="sendBLECommand('GET_LOGS')">Get Logs</button>
+        <button onclick="sendBLECommand('GET_TEMPERATURE')">Get Temperature</button>
+        <button onclick="sendBLECommand('SET_APP_MODE_AUTO')">Set Auto Mode</button>
+        <button onclick="sendBLECommand('SET_APP_MODE_MANUAL')">Set Manual Mode</button>
+        <button onclick="sendBLECommand('GET_LAST_WEATHER_LOG')">Get Last Weather Log</button>
+        <button onclick="sendBLECommand('CLEAR_WARNINGS')">Clear Warnings</button>
+        <button onclick="sendBLECommand('FORCE_OPENING_WINDOW_CALCULATION')">Force Window Calculation</button>
+    </div>
+
+    <script>
+        async function findDevices() {
+          if (!navigator.bluetooth) {
+            alert('Bluetooth nie jest wspierany w tej przeglądarce');
+            return;
+          }
+
+          const devices = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, });
+          console.log(devices);
+        }
+
+
+        async function sendBLECommand(command) {
+            
+          console.log(command);
+        }
+    </script>
+</body>
+</html>
+
