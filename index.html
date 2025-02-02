@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Window Opening BLE</title>
     <style>
+        ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
         .button-container {
             display: flex;
             flex-direction: column;
@@ -15,36 +21,356 @@
             padding: 10px;
             font-size: 16px;
             cursor: pointer;
+            word-break: break-word;
+        }
+
+        #setPropertyInputContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            z-index: 1001;
+        }
+
+        #setPropertyInput {
+            display: block;
+            width: 100%;
+            height: 36px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            padding: 0 10px;
+        }
+
+        #setPropertyInputContainer button {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none;
         }
     </style>
 </head>
 <body>
+    <div id="overlay" onclick="closeOverlay()">
+        <div id="setPropertyInputContainer" style="display: none; margin-top: 10px;" onclick="event.stopPropagation()">
+            <input type="text" id="setPropertyInput" onchange="handleInputChange(event)" />
+            <button onclick="saveProperty()">SAVE</button>
+            <input type="hidden" id="currentProperty" />
+        </div>
+    </div>
+    <div id="bleReadValue" style="margin: 10px; padding: 5px; border: 1px solid #ccc; border-radius: 5px;"></div>
     <div class="button-container">
-        <button onclick="findDevices()">Find Devices</button>
-        <button onclick="sendBLECommand('GET_LOGS')">Get Logs</button>
-        <button onclick="sendBLECommand('GET_TEMPERATURE')">Get Temperature</button>
-        <button onclick="sendBLECommand('SET_APP_MODE_AUTO')">Set Auto Mode</button>
-        <button onclick="sendBLECommand('SET_APP_MODE_MANUAL')">Set Manual Mode</button>
-        <button onclick="sendBLECommand('GET_LAST_WEATHER_LOG')">Get Last Weather Log</button>
-        <button onclick="sendBLECommand('CLEAR_WARNINGS')">Clear Warnings</button>
-        <button onclick="sendBLECommand('FORCE_OPENING_WINDOW_CALCULATION')">Force Window Calculation</button>
+        <button onclick="findDevices()" id="pairDeviceButton">Pair Device</button>
+        <button onclick="disconnect()" id="disconnectButton" disabled>Disconnect</button>
+        <button onclick="getLogs()">Get Logs</button>
+        <button onclick="getTemperature()">Get Temperature</button>
+        <button onclick="setAppMode('AUTO')">Set Auto Mode</button>
+        <button onclick="setAppMode('MANUAL')">Set Manual Mode</button>
+        <button onclick="getLastWeatherLog()">Get Last Weather Log</button>
+        <button onclick="clearWarnings()">Clear Warnings</button>
+        <button onclick="forceWindowCalculation()">Force Window Calculation</button>
+        <button onclick="toggleGetProperties()">GET</button>
+        <div id="propertiesList" style="display: none;">
+            <div class="button-container">
+                <button onclick="getProperty('OPTIMAL_TEMPERATURE')">OPTIMAL_TEMPERATURE</button>
+                <button onclick="getProperty('P_TERM_POSITIVE')">P_TERM_POSITIVE</button>
+                <button onclick="getProperty('P_TERM_NEGATIVE')">P_TERM_NEGATIVE</button>
+                <button onclick="getProperty('D_TERM_POSITIVE')">D_TERM_POSITIVE</button>
+                <button onclick="getProperty('D_TERM_NEGATIVE')">D_TERM_NEGATIVE</button>
+                <button onclick="getProperty('O_TERM_POSITIVE')">O_TERM_POSITIVE</button>
+                <button onclick="getProperty('O_TERM_NEGATIVE')">O_TERM_NEGATIVE</button>
+                <button onclick="getProperty('I_TERM')">I_TERM</button>
+                <button onclick="getProperty('CHANGE_DIFF_THRESHOLD')">CHANGE_DIFF_THRESHOLD</button>
+                <button onclick="getProperty('WINDOW_OPENING_CALCULATION_INTERVAL')">WINDOW_OPENING_CALCULATION_INTERVAL</button>
+                <button onclick="getProperty('OPENING_TERM_POSITIVE_TEMPERATURE_INCREASE')">OPENING_TERM_POSITIVE_TEMPERATURE_INCREASE</button>
+            </div>
+        </div>
+        <button onclick="toggleSetProperties()">SET</button>
+        <div id="setPropertiesList" style="display: none;">
+            <div class="button-container">
+                <button onclick="showSetProperty('OPTIMAL_TEMPERATURE')">OPTIMAL_TEMPERATURE</button>
+                <button onclick="showSetProperty('P_TERM_POSITIVE')">P_TERM_POSITIVE</button>
+                <button onclick="showSetProperty('P_TERM_NEGATIVE')">P_TERM_NEGATIVE</button>
+                <button onclick="showSetProperty('D_TERM_POSITIVE')">D_TERM_POSITIVE</button>
+                <button onclick="showSetProperty('D_TERM_NEGATIVE')">D_TERM_NEGATIVE</button>
+                <button onclick="showSetProperty('O_TERM_POSITIVE')">O_TERM_POSITIVE</button>
+                <button onclick="showSetProperty('O_TERM_NEGATIVE')">O_TERM_NEGATIVE</button>
+                <button onclick="showSetProperty('I_TERM')">I_TERM</button>
+                <button onclick="showSetProperty('CHANGE_DIFF_THRESHOLD')">CHANGE_DIFF_THRESHOLD</button>
+                <button onclick="showSetProperty('WINDOW_OPENING_CALCULATION_INTERVAL')">WINDOW_OPENING_CALCULATION_INTERVAL</button>
+                <button onclick="showSetProperty('OPENING_TERM_POSITIVE_TEMPERATURE_INCREASE')">OPENING_TERM_POSITIVE_TEMPERATURE_INCREASE</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        async function findDevices() {
-          if (!navigator.bluetooth) {
-            alert('Bluetooth nie jest wspierany w tej przeglądarce');
-            return;
-          }
+        let characteristic;
+        let gatt;
+        const bleReadValue = document.getElementById('bleReadValue');
 
-          const devices = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, });
-          console.log(devices);
+        function closeOverlay() {
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('setPropertyInputContainer').style.display = 'none';
+        }
+
+        // Base Method
+        async function sendBLECommand(command) {
+            if (!characteristic) {
+                alert('Brak połączenia z urządzeniem');
+                return;
+            }
+
+            await characteristic.writeValue(stringToArrayBuffer(command));
+
+            const data = await readCharacteristicData();
+
+            return data;
+        }
+
+        async function disconnect() {
+            characteristic.removeEventListener('characteristicvaluechanged');
+
+            await gatt.disconnect();
+
+            document.getElementById('pairDeviceButton').disabled = false;
+            document.getElementById('disconnectButton').disabled = true;
+
+            setResponse('Urządzenie odłączono');
+        }
+
+        // Initialization
+        async function findDevices() {
+            if (!navigator.bluetooth) {
+                alert('Bluetooth nie jest wspierany w tej przeglądarce');
+                return;
+            }
+
+            const device = await navigator.bluetooth.requestDevice({ 
+                filters: [{ namePrefix: 'WindowOpeningBluetooth' }],
+                optionalServices: ['d66f37ee-37a0-4f08-887e-6a59f7e72e3d']
+            });
+
+            const { id, name, gatt: receiveGatt } = device;
+
+            gatt = receiveGatt;
+
+            if (name !== 'WindowOpeningBluetooth') {
+                alert('Nieprawidłowe urządzenie');
+                await gatt.disconnect();
+                return;
+            }
+
+            const server = await gatt.connect();
+
+            device.addEventListener('gattserverdisconnected', () => {
+                document.getElementById('pairDeviceButton').disabled = false;
+                document.getElementById('disconnectButton').disabled = true;
+                setResponse('Urządzenie odłączono');
+            });
+
+            const service = await server.getPrimaryService('d66f37ee-37a0-4f08-887e-6a59f7e72e3d');
+            characteristic = await service.getCharacteristic('5f638107-57db-469f-a6f8-54e718331c63');
+
+            characteristic.addEventListener('characteristicvaluechanged', handleDataReceived);
+
+            document.getElementById('pairDeviceButton').disabled = true;
+            document.getElementById('disconnectButton').disabled = false;
+
+            setResponse('Połączono z urządzeniem');
+        }
+
+        function stringToArrayBuffer(string) {
+            const encoder = new TextEncoder();
+            return encoder.encode(string).buffer;
+        }
+
+        function ArrayBufferToString(arrayBuffer) {
+            const decoder = new TextDecoder();
+            return decoder.decode(arrayBuffer);
+        }
+
+        function setResponse(response) {
+            bleReadValue.innerHTML = response;
+        }
+
+        function handleDataReceived(dataReceived) {
+            const parsedData = JSON.parse(ArrayBufferToString(dataReceived.target.value));
+
+            const [{ commandType, data }] = parsedData;
+
+            if (commandType === 'GET_LOGS') {
+                displayLogs(JSON.parse(data).logs);
+            }
+        }
+
+        async function readCharacteristicData() {
+            const response = await characteristic.readValue();
+
+            if (!response) {
+                return '';
+            }
+
+            const responseString = ArrayBufferToString(response);
+            const [{ commandType, data }] = JSON.parse(responseString);
+            
+            return data;
         }
 
 
-        async function sendBLECommand(command) {
+        // Get Properties
+        function toggleGetProperties() {
+            const propertiesList = document.getElementById('propertiesList');
+            propertiesList.style.display = propertiesList.style.display === 'none' ? 'block' : 'none';
+
+            const setPropertiesList = document.getElementById('setPropertiesList');
+            const inputContainer = document.getElementById('setPropertyInputContainer');
+
+            setPropertiesList.style.display = 'none';
+            inputContainer.style.display = 'none';
+        }
+
+        async function getProperty(property) {
+            const response = await sendBLECommand('GET ' + property);
+            setResponse(response);
+            toggleGetProperties();
+        }
+
+        // Saving
+        async function showSetProperty(property) {
+            const container = document.getElementById('setPropertyInputContainer');
+            const input = document.getElementById('setPropertyInput');
+            const currentProperty = document.getElementById('currentProperty');
             
-          console.log(command);
+            container.style.display = 'block';
+            currentProperty.value = property;
+            
+            // Get current value
+            if (!characteristic) {
+                alert('Brak połączenia z urządzeniem');
+                return;
+            }
+            
+            await characteristic.writeValue(stringToArrayBuffer(`GET ${property}`));
+
+            const currentValue = await readCharacteristicData();
+            input.value = currentValue;
+
+            document.getElementById('overlay').style.display = 'block';
+        }
+
+        async function handleInputChange(event) {
+            const value = event.target.value;
+            input.value = value;
+        }
+
+        async function saveProperty() {
+            if (!characteristic) {
+                alert('Brak połączenia z urządzeniem');
+                return;
+            }
+
+            const property = document.getElementById('currentProperty').value;
+            const value = document.getElementById('setPropertyInput').value;
+            
+            await characteristic.writeValue(stringToArrayBuffer(`SET ${property} ${value}`));
+            const result = await readCharacteristicData();
+
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('setPropertyInputContainer').style.display = 'none';
+
+            setResponse(result);
+        }
+
+        function toggleSetProperties() {
+            const getPropertiesList = document.getElementById('propertiesList');
+            const setPropertiesList = document.getElementById('setPropertiesList');
+            const inputContainer = document.getElementById('setPropertyInputContainer');
+
+            getPropertiesList.style.display = 'none';
+            inputContainer.style.display = 'none';
+
+            if (setPropertiesList.style.display === 'none') {
+                setPropertiesList.style.display = 'block';
+                
+            } else {
+                setPropertiesList.style.display = 'none';
+            }
+        }
+
+        // Additional Methods
+        async function getTemperature() {
+            const response = await sendBLECommand('GET_TEMPERATURE');
+
+            setResponse(response);
+        }
+
+        async function getLogs() {
+            await sendBLECommand('GET_LOGS');
+        }
+
+        function displayLogs(logs) {
+            const logsHtml = logs.map(log => `<li>
+                Date: <strong>${log.date}</strong> <br />
+                Temperature: <strong>${log.temperature}</strong> <br />
+                Window Opening: <strong>${log.windowOpening}</strong> <br />
+                Delta Temporary Window Opening: <strong>${log.deltaTemporaryWindowOpening}</strong>
+            </li>`).join('');
+            const logsContainer = document.createElement('ul');
+            logsContainer.innerHTML = logsHtml;
+
+            setResponse(logsContainer.outerHTML);
+
+        }
+
+        async function setAppMode(mode) {
+            const response = await sendBLECommand(`SET_APP_MODE_${mode}`);
+
+            setResponse(response);
+        }
+
+        async function getLastWeatherLog() {
+            const response = await sendBLECommand('GET_LAST_WEATHER_LOG');
+
+            const [weatherLog] = JSON.parse(response);
+            const weatherLogHtml = `
+                Forecast Date: <strong>${weatherLog.forecastDate}</strong> <br />
+                Outside Temperature: <strong>${weatherLog.outsideTemperature}</strong> <br />
+                Wind Speed: <strong>${weatherLog.windSpeed}</strong> <br />
+                PM10: <strong>${weatherLog.pm10}</strong> <br />
+                PM10 Date: <strong>${weatherLog.pm10Date}</strong> <br />
+                PM25: <strong>${weatherLog.pm25}</strong> <br />
+                PM25 Date: <strong>${weatherLog.pm25Date}</strong> <br />
+            `;
+
+            setResponse(weatherLogHtml);
+        }
+
+        async function clearWarnings() {
+            const response = await sendBLECommand('CLEAR_WARNINGS');
+
+            setResponse(response);
+        }
+
+        async function forceWindowCalculation() {
+            const response = await sendBLECommand('FORCE_OPENING_WINDOW_CALCULATION');
+
+            setResponse(response);
         }
     </script>
 </body>
