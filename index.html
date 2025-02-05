@@ -64,6 +64,12 @@
             z-index: 1000;
             display: none;
         }
+
+        .mainInput {
+            padding: 10px;
+            font-size: 16px;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -78,6 +84,8 @@
     <div class="button-container">
         <button onclick="findDevices()" id="pairDeviceButton">Pair Device</button>
         <button onclick="disconnect()" id="disconnectButton" disabled>Disconnect</button>
+        <input type="number" min="0" max="100" class="mainInput" id="newServosPosition" /> 
+        <button onclick="moveBoothServosSmoothlyTo()">Move Booth Servos Smoothly To</button>
         <button onclick="getLogs()">Get Logs</button>
         <button onclick="getTemperature()">Get Temperature</button>
         <button onclick="setAppMode('AUTO')">Set Auto Mode</button>
@@ -136,15 +144,24 @@
                 return;
             }
 
-            await characteristic.writeValue(stringToArrayBuffer(command));
+            await characteristic.writeValueWithResponse(stringToArrayBuffer(command));
 
             const data = await readCharacteristicData();
 
             return data;
         }
 
+        async function sendBLECommandWithoutResponse(command) {
+            if (!characteristic) {
+                alert('Brak połączenia z urządzeniem');
+                return;
+            }
+
+            await characteristic.writeValueWithoutResponse(stringToArrayBuffer(command));
+        }
+
         async function disconnect() {
-            characteristic.removeEventListener('characteristicvaluechanged');
+            characteristic.removeEventListener('characteristicvaluechanged', handleDataReceived);
 
             await gatt.disconnect();
 
@@ -189,8 +206,10 @@
 
             characteristic.addEventListener('characteristicvaluechanged', handleDataReceived);
 
+            await characteristic.startNotifications();
+
             document.getElementById('pairDeviceButton').disabled = true;
-            document.getElementById('disconnectButton').disabled = false;
+             document.getElementById('disconnectButton').disabled = false;
 
             setResponse('Połączono z urządzeniem');
         }
@@ -209,10 +228,17 @@
             bleReadValue.innerHTML = response;
         }
 
+        function addResponse(response) {
+            bleReadValue.innerHTML += response;
+        }
+
         function handleDataReceived(dataReceived) {
+            console.log('handleDataReceived');
             const parsedData = JSON.parse(ArrayBufferToString(dataReceived.target.value));
 
             const [{ commandType, data }] = parsedData;
+
+            console.log('Received Data', commandType, data);
 
             if (commandType === 'GET_LOGS') {
                 displayLogs(JSON.parse(data).logs);
@@ -321,7 +347,9 @@
         }
 
         async function getLogs() {
-            await sendBLECommand('GET_LOGS');
+            setResponse('');
+
+            await sendBLECommandWithoutResponse('GET_LOGS');
         }
 
         function displayLogs(logs) {
@@ -334,8 +362,7 @@
             const logsContainer = document.createElement('ul');
             logsContainer.innerHTML = logsHtml;
 
-            setResponse(logsContainer.outerHTML);
-
+            addResponse(logsContainer.outerHTML);
         }
 
         async function setAppMode(mode) {
@@ -369,6 +396,13 @@
 
         async function forceWindowCalculation() {
             const response = await sendBLECommand('FORCE_OPENING_WINDOW_CALCULATION');
+
+            setResponse(response);
+        }
+
+        async function moveBoothServosSmoothlyTo() {
+            const newServosPosition = document.getElementById('newServosPosition').value;
+            const response = await sendBLECommand(`MOVE_BOTH_SERVOS_SMOOTHLY_TO ${newServosPosition}`);
 
             setResponse(response);
         }
