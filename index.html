@@ -70,12 +70,16 @@
             font-size: 16px;
             display: block;
         }
+
+        .log {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
     <div id="overlay" onclick="closeOverlay()">
         <div id="setPropertyInputContainer" style="display: none; margin-top: 10px;" onclick="event.stopPropagation()">
-            <input type="text" id="setPropertyInput" onchange="handleInputChange(event)" />
+            <input type="text" id="setPropertyInput" />
             <button onclick="saveProperty()">SAVE</button>
             <input type="hidden" id="currentProperty" />
         </div>
@@ -233,7 +237,6 @@
         }
 
         function handleDataReceived(dataReceived) {
-            console.log('handleDataReceived');
             const parsedData = JSON.parse(ArrayBufferToString(dataReceived.target.value));
 
             const [{ commandType, data }] = parsedData;
@@ -300,11 +303,6 @@
             document.getElementById('overlay').style.display = 'block';
         }
 
-        async function handleInputChange(event) {
-            const value = event.target.value;
-            input.value = value;
-        }
-
         async function saveProperty() {
             if (!characteristic) {
                 alert('Brak połączenia z urządzeniem');
@@ -353,7 +351,7 @@
         }
 
         function displayLogs(logs) {
-            const logsHtml = logs.map(log => `<li>
+            const logsHtml = logs.map(log => `<li class="log">
                 Date: <strong>${log.date}</strong> <br />
                 Temperature: <strong>${log.temperature}</strong> <br />
                 Window Opening: <strong>${log.windowOpening}</strong> <br />
